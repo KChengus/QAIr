@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { NextRequest, NextResponse } from 'next/server';
+import { checkRateLimit, getRateLimitKey, AI_RATE_LIMIT } from '@/lib/rate-limit';
 
 const client = new Anthropic();
 
@@ -9,6 +10,16 @@ interface QAPair {
 }
 
 export async function POST(request: NextRequest) {
+  // Rate limit: 5 requests per minute per IP
+  const rlKey = getRateLimitKey(request, 'grade-answers');
+  const rl = checkRateLimit(rlKey, AI_RATE_LIMIT);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: `Too many requests. Please try again in ${Math.ceil(rl.retryAfterMs / 1000)} seconds.` },
+      { status: 429 }
+    );
+  }
+
   const { pairs, sourceContext } = (await request.json()) as {
     pairs: QAPair[];
     sourceContext: string;

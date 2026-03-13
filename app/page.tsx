@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { AppView, ParsedQuestion, StudyResult } from '@/lib/types';
+import { useState, useCallback } from 'react';
+import { AppView, ParsedQuestion, StudyResult, Difficulty } from '@/lib/types';
 import SetupView from '@/components/SetupView';
 import ReviewView from '@/components/ReviewView';
 import StudyView from '@/components/StudyView';
@@ -12,10 +12,13 @@ export default function Home() {
   const [questions, setQuestions] = useState<ParsedQuestion[]>([]);
   const [sourceContext, setSourceContext] = useState('');
   const [results, setResults] = useState<StudyResult[]>([]);
+  const [difficulty, setDifficulty] = useState<Difficulty>('medium');
+  const [previousQuestions, setPreviousQuestions] = useState<string[]>([]);
 
-  const handleParsed = (qs: ParsedQuestion[], ctx: string) => {
+  const handleParsed = (qs: ParsedQuestion[], ctx: string, diff: Difficulty) => {
     setQuestions(qs);
     setSourceContext(ctx);
+    setDifficulty(diff);
     setView('review');
   };
 
@@ -27,14 +30,47 @@ export default function Home() {
 
   const handleComplete = (sessionResults: StudyResult[]) => {
     setResults(sessionResults);
+    // Accumulate all questions asked so far so the next round avoids them
+    setPreviousQuestions((prev) => [
+      ...prev,
+      ...sessionResults.map((r) => r.question),
+    ]);
     setView('complete');
   };
+
+  const handleGenerateMore = useCallback(async () => {
+    const res = await fetch('/api/parse-questions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        text: sourceContext,
+        difficulty,
+        previousQuestions,
+      }),
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to generate questions');
+
+    if (!data.questions?.length) {
+      throw new Error('No new questions could be generated from this material.');
+    }
+
+    const newQuestions: ParsedQuestion[] = data.questions.map(
+      (q: string, i: number) => ({ id: `q-more-${Date.now()}-${i}`, text: q, enabled: true })
+    );
+
+    setQuestions(newQuestions);
+    setView('review');
+  }, [sourceContext, difficulty, previousQuestions]);
 
   const handleReset = () => {
     setView('setup');
     setQuestions([]);
     setSourceContext('');
     setResults([]);
+    setDifficulty('medium');
+    setPreviousQuestions([]);
   };
 
   return (
@@ -74,7 +110,7 @@ export default function Home() {
           />
         )}
         {view === 'complete' && (
-          <CompletedView results={results} onReset={handleReset} />
+          <CompletedView results={results} onReset={handleReset} onGenerateMore={handleGenerateMore} />
         )}
       </div>
     </main>

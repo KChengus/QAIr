@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { NextRequest, NextResponse } from 'next/server';
+import { checkRateLimit, getRateLimitKey, AI_RATE_LIMIT } from '@/lib/rate-limit';
 
 const client = new Anthropic();
 
@@ -12,7 +13,17 @@ const DIFFICULTY_INSTRUCTIONS: Record<Difficulty, string> = {
 };
 
 export async function POST(request: NextRequest) {
-  const { text, difficulty = 'medium' } = await request.json();
+  // Rate limit: 5 requests per minute per IP
+  const rlKey = getRateLimitKey(request, 'parse-questions');
+  const rl = checkRateLimit(rlKey, AI_RATE_LIMIT);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: `Too many requests. Please try again in ${Math.ceil(rl.retryAfterMs / 1000)} seconds.` },
+      { status: 429 }
+    );
+  }
+
+  const { text, difficulty = 'medium', previousQuestions = [] } = await request.json();
 
   if (!text?.trim()) {
     return NextResponse.json({ error: 'No text provided' }, { status: 400 });
@@ -20,6 +31,11 @@ export async function POST(request: NextRequest) {
 
   const validDifficulties: Difficulty[] = ['easy', 'medium', 'hard'];
   const diff: Difficulty = validDifficulties.includes(difficulty) ? difficulty : 'medium';
+
+  const prevBlock =
+    Array.isArray(previousQuestions) && previousQuestions.length > 0
+      ? `\n\nIMPORTANT: The following questions have ALREADY been generated. You MUST generate completely NEW and DIFFERENT questions. Do NOT repeat or rephrase any of these:\n${previousQuestions.map((q: string, i: number) => `${i + 1}. ${q}`).join('\n')}`
+      : '';
 
   try {
     const message = await client.messages.create({
@@ -33,7 +49,7 @@ export async function POST(request: NextRequest) {
 Difficulty: ${diff.toUpperCase()}
 ${DIFFICULTY_INSTRUCTIONS[diff]}
 
-Generate 5-10 questions based on the material. The questions should be answerable using ONLY the provided source material.
+Generate 5-10 questions based on the material. The questions should be answerable using ONLY the provided source material.${prevBlock}
 
 You MUST return ONLY a raw JSON object — no markdown fences, no explanation, no extra text.
 Format: {"questions":["Question 1?","Question 2?"]}

@@ -1,10 +1,12 @@
 'use client';
 
+import { useState } from 'react';
 import { StudyResult } from '@/lib/types';
 
 interface Props {
   results: StudyResult[];
   onReset: () => void;
+  onGenerateMore: () => Promise<void>;
 }
 
 const STATUS_BADGE: Record<string, string> = {
@@ -14,7 +16,20 @@ const STATUS_BADGE: Record<string, string> = {
   'Off Topic': 'bg-red-100 text-red-700',
 };
 
-export default function CompletedView({ results, onReset }: Props) {
+export default function CompletedView({ results, onReset, onGenerateMore }: Props) {
+  const [generatingMore, setGeneratingMore] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleGenerateMore = async () => {
+    setGeneratingMore(true);
+    setError('');
+    try {
+      await onGenerateMore();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to generate new questions');
+      setGeneratingMore(false);
+    }
+  };
   const avg = results.length
     ? Math.round(results.reduce((sum, r) => sum + r.grading.score, 0) / results.length)
     : 0;
@@ -76,12 +91,35 @@ export default function CompletedView({ results, onReset }: Props) {
         ))}
       </div>
 
-      <div className="mt-8 flex justify-center">
+      {error && (
+        <p className="mt-6 text-sm text-red-600 bg-red-50 rounded-lg px-4 py-2 text-center">
+          {error}
+        </p>
+      )}
+
+      <div className="mt-8 flex justify-center gap-4">
+        <button
+          onClick={handleGenerateMore}
+          disabled={generatingMore}
+          className="px-8 py-3 bg-blue-600 text-white font-semibold rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+        >
+          {generatingMore ? (
+            <>
+              <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+              </svg>
+              Generating...
+            </>
+          ) : (
+            'Generate More Questions'
+          )}
+        </button>
         <button
           onClick={onReset}
-          className="px-8 py-3 bg-blue-600 text-white font-semibold rounded-xl hover:bg-blue-700 transition-colors"
+          className="px-8 py-3 bg-white text-gray-700 font-semibold rounded-xl border border-gray-300 hover:bg-gray-50 transition-colors"
         >
-          Start New Deck
+          New Deck
         </button>
       </div>
     </div>

@@ -20,3 +20,5 @@ export interface StudyResult {
 }
 
 export type AppView = 'setup' | 'review' | 'study' | 'complete';
+
+export type Difficulty = 'easy' | 'medium' | 'hard';
