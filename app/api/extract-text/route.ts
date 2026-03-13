@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { checkRateLimit, getRateLimitKey, DEFAULT_RATE_LIMIT } from '@/lib/rate-limit';
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const pdfParse = require('pdf-parse');
 
 function isPdf(file: File): boolean {
   return (
@@ -94,6 +92,10 @@ export async function POST(request: NextRequest) {
     let text: string;
 
     if (isPdf(file)) {
+      // Lazy-load pdf-parse inside the handler to avoid top-level require
+      // crashing on Vercel serverless (test file path resolution issue)
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const pdfParse = require('pdf-parse');
       const result = await pdfParse(buffer, { pagerender: renderPage });
       text = result.text;
     } else {

@@ -60,6 +60,10 @@ export default function SetupView({ onParsed }: Props) {
         const form = new FormData();
         form.append('file', file);
         const res = await fetch('/api/extract-text', { method: 'POST', body: form });
+        const contentType = res.headers.get('content-type') || '';
+        if (!contentType.includes('application/json')) {
+          throw new Error('Server error while processing PDF. Please try again.');
+        }
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Failed to extract text');
         content = data.text;
