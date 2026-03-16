@@ -23,7 +23,8 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { text, difficulty = 'medium', previousQuestions = [] } = await request.json();
+  const { text, difficulty = 'medium', previousQuestions = [], questionCount = 5 } = await request.json();
+  const count = Math.min(10, Math.max(1, Number(questionCount) || 5));
 
   if (!text?.trim()) {
     return NextResponse.json({ error: 'No text provided' }, { status: 400 });
@@ -49,7 +50,7 @@ export async function POST(request: NextRequest) {
 Difficulty: ${diff.toUpperCase()}
 ${DIFFICULTY_INSTRUCTIONS[diff]}
 
-Generate 5-10 questions based on the material. The questions should be answerable using ONLY the provided source material.${prevBlock}
+Generate exactly ${count} question${count === 1 ? '' : 's'} based on the material. The questions should be answerable using ONLY the provided source material.${prevBlock}
 
 You MUST return ONLY a raw JSON object — no markdown fences, no explanation, no extra text.
 Format: {"questions":["Question 1?","Question 2?"]}
