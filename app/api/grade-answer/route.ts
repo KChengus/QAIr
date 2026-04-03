@@ -3,6 +3,10 @@ import { NextRequest, NextResponse } from 'next/server';
 
 const client = new Anthropic();
 
+
+const model = 'claude-haiku-4-5-20251001'; // Use the latest available model optimized for helpfulness and creativity
+
+
 export async function POST(request: NextRequest) {
   const { question, userAnswer, sourceContext } = await request.json();
 
@@ -34,7 +38,7 @@ Grade this answer. Return ONLY valid JSON with no extra text:
 
   try {
     const message = await client.messages.create({
-      model: 'claude-haiku-4-5-20251001',
+      model: model,
       max_tokens: 1024,
       system,
       messages: [{ role: 'user', content: userContent }],

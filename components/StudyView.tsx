@@ -6,6 +6,7 @@ import { ParsedQuestion, GradingResult, StudyResult } from '@/lib/types';
 interface Props {
   questions: ParsedQuestion[];
   sourceContext: string;
+  sourceGrounded: boolean;
   onComplete: (results: StudyResult[]) => void;
 }
 
@@ -30,7 +31,7 @@ const STATUS_BADGE: Record<string, string> = {
   'Off Topic': 'bg-red-100 text-red-700',
 };
 
-export default function StudyView({ questions, sourceContext, onComplete }: Props) {
+export default function StudyView({ questions, sourceContext, sourceGrounded, onComplete }: Props) {
   const [answers, setAnswers] = useState<string[]>(() => questions.map(() => ''));
   const [grades, setGrades] = useState<GradingResult[] | null>(null);
   const [loading, setLoading] = useState(false);
@@ -102,7 +103,7 @@ export default function StudyView({ questions, sourceContext, onComplete }: Prop
       const res = await fetch('/api/grade-answers', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pairs, sourceContext }),
+        body: JSON.stringify({ pairs, sourceContext: sourceGrounded ? sourceContext : '' }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Grading failed');

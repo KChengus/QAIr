@@ -13,12 +13,14 @@ export default function Home() {
   const [sourceContext, setSourceContext] = useState('');
   const [results, setResults] = useState<StudyResult[]>([]);
   const [difficulty, setDifficulty] = useState<Difficulty>('medium');
+  const [sourceGrounded, setSourceGrounded] = useState(true);
   const [previousQuestions, setPreviousQuestions] = useState<string[]>([]);
 
-  const handleParsed = (qs: ParsedQuestion[], ctx: string, diff: Difficulty) => {
+  const handleParsed = (qs: ParsedQuestion[], ctx: string, diff: Difficulty, grounded: boolean) => {
     setQuestions(qs);
     setSourceContext(ctx);
     setDifficulty(diff);
+    setSourceGrounded(grounded);
     setView('review');
   };
 
@@ -46,6 +48,7 @@ export default function Home() {
         text: sourceContext,
         difficulty,
         previousQuestions,
+        sourceGrounded,
       }),
     });
 
@@ -70,6 +73,7 @@ export default function Home() {
     setSourceContext('');
     setResults([]);
     setDifficulty('medium');
+    setSourceGrounded(true);
     setPreviousQuestions([]);
   };
 
@@ -106,6 +110,7 @@ export default function Home() {
           <StudyView
             questions={questions}
             sourceContext={sourceContext}
+            sourceGrounded={sourceGrounded}
             onComplete={handleComplete}
           />
         )}

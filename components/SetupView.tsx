@@ -4,7 +4,7 @@ import { useState, useRef, useCallback } from 'react';
 import { ParsedQuestion, Difficulty } from '@/lib/types';
 
 interface Props {
-  onParsed: (questions: ParsedQuestion[], sourceContext: string, difficulty: Difficulty) => void;
+  onParsed: (questions: ParsedQuestion[], sourceContext: string, difficulty: Difficulty, sourceGrounded: boolean) => void;
 }
 
 interface UploadedFile {
@@ -38,6 +38,7 @@ export default function SetupView({ onParsed }: Props) {
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [difficulty, setDifficulty] = useState<Difficulty>('medium');
   const [questionCount, setQuestionCount] = useState(5);
+  const [sourceGrounded, setSourceGrounded] = useState(true);
   const [loading, setLoading] = useState(false);
   const [uploadingNames, setUploadingNames] = useState<string[]>([]);
   const [error, setError] = useState('');
@@ -159,7 +160,7 @@ export default function SetupView({ onParsed }: Props) {
       const res = await fetch('/api/parse-questions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: combinedText, difficulty, questionCount }),
+        body: JSON.stringify({ text: combinedText, difficulty, questionCount, sourceGrounded }),
       });
 
       const data = await res.json();
@@ -174,7 +175,7 @@ export default function SetupView({ onParsed }: Props) {
         (q: string, i: number) => ({ id: `q-${i}`, text: q, enabled: true })
       );
 
-      onParsed(questions, data.sourceContext ?? combinedText, difficulty);
+      onParsed(questions, data.sourceContext ?? combinedText, difficulty, sourceGrounded);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong');
     } finally {
@@ -339,6 +340,32 @@ export default function SetupView({ onParsed }: Props) {
               )
             )}
           </div>
+        </div>
+
+        {/* Source grounding toggle */}
+        <div className="mt-4 flex items-center justify-between py-3 px-4 rounded-xl border border-gray-200 bg-gray-50">
+          <div>
+            <p className="text-sm font-medium text-gray-700">Restrict to source material</p>
+            <p className="text-xs text-gray-500 mt-0.5">
+              {sourceGrounded
+                ? 'Questions will only cover what is in your notes.'
+                : 'Questions may go beyond your notes using general knowledge.'}
+            </p>
+          </div>
+          <button
+            role="switch"
+            aria-checked={sourceGrounded}
+            onClick={() => setSourceGrounded((v) => !v)}
+            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 ${
+              sourceGrounded ? 'bg-blue-600' : 'bg-gray-300'
+            }`}
+          >
+            <span
+              className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transform transition duration-200 ${
+                sourceGrounded ? 'translate-x-5' : 'translate-x-0'
+              }`}
+            />
+          </button>
         </div>
 
         {/* Question count selector */}
