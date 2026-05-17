@@ -187,11 +187,15 @@ export default function SetupView({ onParsed }: Props) {
     <div className="max-w-3xl mx-auto">
       <div className="text-center mb-10">
         <h1 className="text-3xl font-bold text-gray-900 mb-3">
-          AI-Powered Flashcards
+          QuestionAIre 
+
         </h1>
-        <p className="text-gray-500 text-lg">
-          Paste your notes or upload files. AI will generate study questions
-          and grade your answers with detailed feedback.
+        <p className="text-gray-500 text-base">
+          Have you truly understood the context of your material? <br/>
+          Challenge yourself by explaining your thoughts and ideas, either out loud or in writing. <br/> 
+          This kind of active learning forces you to slow down, question what you know, and make your understanding more precise. <br/>
+          Empower your prefrontal cortex to achieve greatness 🧠 <br/>
+          In doing so, you deepen comprehension and build stronger, more lasting understanding.
         </p>
       </div>
 
@@ -345,11 +349,11 @@ export default function SetupView({ onParsed }: Props) {
         {/* Source grounding toggle */}
         <div className="mt-4 flex items-center justify-between py-3 px-4 rounded-xl border border-gray-200 bg-gray-50">
           <div>
-            <p className="text-sm font-medium text-gray-700">Restrict to source material</p>
+            <p className="text-sm font-medium text-gray-700">Enable external sources</p>
             <p className="text-xs text-gray-500 mt-0.5">
               {sourceGrounded
-                ? 'Questions will only cover what is in your notes.'
-                : 'Questions may go beyond your notes using general knowledge.'}
+                ? 'Questions may go beyond your notes using general knowledge.'
+                : 'Questions will only cover what is in your notes.'}
             </p>
           </div>
           <button

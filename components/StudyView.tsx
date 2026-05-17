@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { ParsedQuestion, GradingResult, StudyResult } from '@/lib/types';
 
 interface Props {
@@ -37,11 +37,19 @@ export default function StudyView({ questions, sourceContext, sourceGrounded, on
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [expandedQ, setExpandedQ] = useState<number | null>(null);
+  const [currentIdx, setCurrentIdx] = useState(0);
   const [recordingIdx, setRecordingIdx] = useState<number | null>(null);
+  const [transcribingIdx, setTranscribingIdx] = useState<number | null>(null);
   const [speechError, setSpeechError] = useState('');
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recognitionRef = useRef<any>(null);
-  const questionRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    textareaRef.current?.focus();
+  }, [currentIdx]);
 
   const updateAnswer = (idx: number, value: string) => {
     setAnswers((prev) => {
@@ -51,48 +59,110 @@ export default function StudyView({ questions, sourceContext, sourceGrounded, on
     });
   };
 
-  const toggleRecording = (idx: number) => {
-    if (recordingIdx === idx) {
-      recognitionRef.current?.stop();
-      setRecordingIdx(null);
+  const appendTranscript = (idx: number, transcript: string) => {
+    setAnswers((prev) => {
+      const next = [...prev];
+      next[idx] = prev[idx] ? prev[idx] + ' ' + transcript : transcript;
+      return next;
+    });
+  };
+
+  const stopActiveRecording = () => {
+    recognitionRef.current?.stop();
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+    }
+    setRecordingIdx(null);
+  };
+
+  const goTo = (idx: number) => {
+    stopActiveRecording();
+    setSpeechError('');
+    setCurrentIdx(Math.max(0, Math.min(questions.length - 1, idx)));
+  };
+
+  const startWhisperRecording = async (idx: number) => {
+    setSpeechError('');
+    let stream: MediaStream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch {
+      setSpeechError('Microphone access denied.');
       return;
     }
-    if (recordingIdx !== null) {
-      recognitionRef.current?.stop();
-    }
 
+    const mimeType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4']
+      .find((t) => MediaRecorder.isTypeSupported(t)) ?? '';
+    const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+    audioChunksRef.current = [];
+
+    recorder.ondataavailable = (e) => {
+      if (e.data.size > 0) audioChunksRef.current.push(e.data);
+    };
+
+    recorder.onstop = async () => {
+      stream.getTracks().forEach((t) => t.stop());
+      const blob = new Blob(audioChunksRef.current, { type: recorder.mimeType || 'audio/webm' });
+      const ext = recorder.mimeType.includes('ogg') ? 'ogg' : recorder.mimeType.includes('mp4') ? 'mp4' : 'webm';
+      const file = new File([blob], `recording.${ext}`, { type: blob.type });
+
+      setTranscribingIdx(idx);
+      try {
+        const form = new FormData();
+        form.append('audio', file);
+        const res = await fetch('/api/transcribe', { method: 'POST', body: form });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Transcription failed');
+        if (data.text) appendTranscript(idx, data.text);
+      } catch (err) {
+        setSpeechError(err instanceof Error ? err.message : 'Transcription failed');
+      } finally {
+        setTranscribingIdx(null);
+      }
+    };
+
+    recorder.start();
+    mediaRecorderRef.current = recorder;
+    setRecordingIdx(idx);
+  };
+
+  const startRecording = (idx: number) => {
+    setSpeechError('');
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const w = window as any;
     const SR = w.SpeechRecognition || w.webkitSpeechRecognition;
-    if (!SR) {
-      setSpeechError('Voice input is not supported in this browser. Use Chrome or Edge for speech recognition.');
-      return;
+    if (SR) {
+      const recognition = new SR();
+      recognition.continuous = false;
+      recognition.interimResults = false;
+      recognition.lang = 'en-US';
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      recognition.onresult = (e: any) => appendTranscript(idx, e.results[0][0].transcript);
+      recognition.onerror = () => setRecordingIdx(null);
+      recognition.onend = () => setRecordingIdx(null);
+      recognition.start();
+      recognitionRef.current = recognition;
+      setRecordingIdx(idx);
+    } else if (typeof MediaRecorder !== 'undefined' && navigator.mediaDevices) {
+      startWhisperRecording(idx);
+    } else {
+      setSpeechError('Voice input is not supported in this browser.');
     }
+  };
 
+  const toggleRecording = (idx: number) => {
     setSpeechError('');
-    const recognition = new SR();
-    recognition.continuous = false;
-    recognition.interimResults = false;
-    recognition.lang = 'en-US';
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    recognition.onresult = (e: any) => {
-      const transcript = e.results[0][0].transcript;
-      setAnswers((prev) => {
-        const next = [...prev];
-        next[idx] = prev[idx] ? prev[idx] + ' ' + transcript : transcript;
-        return next;
-      });
-    };
-    recognition.onerror = () => setRecordingIdx(null);
-    recognition.onend = () => setRecordingIdx(null);
-    recognition.start();
-    recognitionRef.current = recognition;
-    setRecordingIdx(idx);
+    if (recordingIdx !== null) {
+      stopActiveRecording();
+      if (recordingIdx === idx) return;
+    }
+    startRecording(idx);
   };
 
   const submitAll = async () => {
     setLoading(true);
     setError('');
+    stopActiveRecording();
 
     const pairs = questions.map((q, i) => ({
       question: q.text,
@@ -125,130 +195,66 @@ export default function StudyView({ questions, sourceContext, sourceGrounded, on
     onComplete(results);
   };
 
-  const scrollToQuestion = (idx: number) => {
-    questionRefs.current[idx]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    setExpandedQ(idx);
-  };
-
   const answeredCount = answers.filter((a) => a.trim()).length;
   const avgScore = grades
     ? Math.round(grades.reduce((sum, g) => sum + g.score, 0) / grades.length)
     : null;
+  const isLast = currentIdx === questions.length - 1;
 
-  return (
-    <div className="max-w-3xl mx-auto">
-      {/* Question number grid — always visible */}
-      <div className="sticky top-0 z-10 bg-gray-50/95 backdrop-blur-sm pb-4 pt-1">
-        <div className="flex items-center justify-between mb-2">
-          <h2 className="text-lg font-bold text-gray-900">
-            {grades ? 'Results' : 'Answer All Questions'}
-          </h2>
-          <span className="text-sm text-gray-500">
-            {grades
-              ? `Average: ${avgScore}%`
-              : `${answeredCount} / ${questions.length} answered`}
-          </span>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {questions.map((_, i) => {
-            const grade = grades?.[i];
-            const hasAnswer = answers[i].trim().length > 0;
-            const cellClass = grade
-              ? `${STATUS_CELL[grade.status]} border font-bold`
-              : hasAnswer
-              ? 'bg-blue-100 text-blue-700 border border-blue-300'
-              : 'bg-white text-gray-400 border border-gray-200';
-
-            return (
-              <button
-                key={i}
-                onClick={() => scrollToQuestion(i)}
-                className={`w-9 h-9 rounded-lg text-sm font-medium flex items-center justify-center transition-all hover:scale-110 ${cellClass}`}
-                title={grade ? `Q${i + 1}: ${grade.score}% — ${grade.status}` : `Question ${i + 1}`}
-              >
-                {i + 1}
-              </button>
-            );
-          })}
-        </div>
-        {grades && (
-          <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
-            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-emerald-500 inline-block" /> Correct</span>
-            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-amber-500 inline-block" /> Partial</span>
-            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-orange-500 inline-block" /> Misconception</span>
-            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-red-500 inline-block" /> Off Topic</span>
+  // ─── Results view (post-grading) ─────────────────────────────────────────
+  if (grades) {
+    return (
+      <div className="max-w-3xl mx-auto">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h2 className="text-xl font-bold text-gray-900">Results</h2>
+            <p className="text-sm text-gray-500 mt-0.5">Average score: <span className="font-semibold text-gray-700">{avgScore}%</span></p>
           </div>
-        )}
-      </div>
+          <div className="flex flex-wrap gap-2">
+            {questions.map((_, i) => {
+              const grade = grades[i];
+              return (
+                <button
+                  key={i}
+                  onClick={() => setExpandedQ(expandedQ === i ? null : i)}
+                  className={`w-9 h-9 rounded-lg text-sm font-medium flex items-center justify-center transition-all hover:scale-110 ${STATUS_CELL[grade.status]} border font-bold`}
+                  title={`Q${i + 1}: ${grade.score}% — ${grade.status}`}
+                >
+                  {i + 1}
+                </button>
+              );
+            })}
+          </div>
+        </div>
 
-      {/* Questions list */}
-      <div className="space-y-4 mt-2">
-        {questions.map((q, i) => {
-          const grade = grades?.[i];
-          const isExpanded = expandedQ === i;
+        <div className="flex items-center gap-4 mb-4 text-xs text-gray-500">
+          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-emerald-500 inline-block" /> Correct</span>
+          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-amber-500 inline-block" /> Partial</span>
+          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-orange-500 inline-block" /> Misconception</span>
+          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-red-500 inline-block" /> Off Topic</span>
+        </div>
 
-          return (
-            <div
-              key={q.id}
-              ref={(el) => { questionRefs.current[i] = el; }}
-              className={`bg-white rounded-2xl border shadow-sm overflow-hidden transition-all ${
-                grade
-                  ? `border-l-4 ${grade.score >= 85 ? 'border-l-emerald-500' : grade.score >= 50 ? 'border-l-amber-500' : 'border-l-red-500'} border-gray-200`
-                  : 'border-gray-200'
-              }`}
-            >
-              {/* Question header */}
-              <div className="p-5 pb-3">
-                <div className="flex items-start gap-3">
-                  <span className={`shrink-0 w-7 h-7 rounded-lg text-xs font-bold flex items-center justify-center ${
-                    grade ? STATUS_BG[grade.status] + ' text-white' : 'bg-blue-100 text-blue-600'
-                  }`}>
-                    {i + 1}
-                  </span>
-                  <p className="text-sm font-medium text-gray-800 pt-0.5 flex-1">{q.text}</p>
-                  {grade && (
+        <div className="space-y-4">
+          {questions.map((q, i) => {
+            const grade = grades[i];
+            const isExpanded = expandedQ === i;
+            return (
+              <div
+                key={q.id}
+                className={`bg-white rounded-2xl border shadow-sm overflow-hidden border-l-4 border-gray-200 ${
+                  grade.score >= 85 ? 'border-l-emerald-500' : grade.score >= 50 ? 'border-l-amber-500' : 'border-l-red-500'
+                }`}
+              >
+                <div className="p-5 pb-3">
+                  <div className="flex items-start gap-3">
+                    <span className={`shrink-0 w-7 h-7 rounded-lg text-xs font-bold flex items-center justify-center ${STATUS_BG[grade.status]} text-white`}>
+                      {i + 1}
+                    </span>
+                    <p className="text-sm font-medium text-gray-800 pt-0.5 flex-1">{q.text}</p>
                     <span className="shrink-0 text-sm font-bold text-gray-700">{grade.score}%</span>
-                  )}
-                </div>
-              </div>
-
-              {/* Answer input (pre-grading) */}
-              {!grades && (
-                <div className="px-5 pb-5">
-                  <div className="relative">
-                    <textarea
-                      value={answers[i]}
-                      onChange={(e) => updateAnswer(i, e.target.value)}
-                      placeholder="Type your answer..."
-                      rows={3}
-                      disabled={loading}
-                      className="w-full rounded-xl border border-gray-300 p-3 pr-12 text-sm text-gray-800 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none disabled:opacity-60"
-                    />
-                    <button
-                      onClick={() => toggleRecording(i)}
-                      disabled={loading}
-                      title={recordingIdx === i ? 'Stop recording' : 'Dictate answer'}
-                      className={`absolute right-2.5 top-2.5 w-8 h-8 rounded-full flex items-center justify-center transition-all ${
-                        recordingIdx === i
-                          ? 'bg-red-500 text-white animate-pulse'
-                          : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                      }`}
-                    >
-                      <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
-                        <path d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm4 10.93A7.001 7.001 0 0017 8a1 1 0 10-2 0A5 5 0 015 8a1 1 0 00-2 0 7.001 7.001 0 006 6.93V17H6a1 1 0 100 2h8a1 1 0 100-2h-3v-2.07z" />
-                      </svg>
-                    </button>
                   </div>
-                  {recordingIdx === i && (
-                    <p className="mt-1 text-xs text-red-500 font-medium">Listening...</p>
-                  )}
                 </div>
-              )}
-
-              {/* Grading result (post-grading) */}
-              {grade && (
                 <div className="px-5 pb-4">
-                  {/* Status + your answer */}
                   <div className="flex items-center gap-2 mb-2">
                     <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${STATUS_BADGE[grade.status]}`}>
                       {grade.status}
@@ -260,17 +266,12 @@ export default function StudyView({ questions, sourceContext, sourceGrounded, on
                     </p>
                   )}
                   <p className="text-sm text-gray-600 mb-2">{grade.feedback}</p>
-
-                  {/* Expandable details */}
                   <button
                     onClick={() => setExpandedQ(isExpanded ? null : i)}
                     className="text-xs text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
                   >
                     {isExpanded ? 'Hide details' : 'Show details'}
-                    <svg
-                      className={`w-3 h-3 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
-                      fill="none" stroke="currentColor" viewBox="0 0 24 24"
-                    >
+                    <svg className={`w-3 h-3 transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                     </svg>
                   </button>
@@ -297,14 +298,138 @@ export default function StudyView({ questions, sourceContext, sourceGrounded, on
                     </div>
                   )}
                 </div>
-              )}
-            </div>
-          );
-        })}
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="sticky bottom-0 bg-gray-50/95 backdrop-blur-sm pt-4 pb-2 mt-6">
+          <button
+            onClick={handleFinish}
+            className="w-full py-3 bg-gray-900 text-white font-semibold rounded-xl hover:bg-gray-700 transition-colors"
+          >
+            View Full Summary
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── Study view (one question at a time) ─────────────────────────────────
+  const q = questions[currentIdx];
+  const progress = ((currentIdx + 1) / questions.length) * 100;
+
+  return (
+    <div className="max-w-3xl mx-auto">
+      {/* Progress + jump grid */}
+      <div className="sticky top-0 z-10 bg-gray-50/95 backdrop-blur-sm pb-4 pt-1">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-sm font-medium text-gray-700">
+            Question <span className="text-blue-600">{currentIdx + 1}</span> of {questions.length}
+          </span>
+          <span className="text-sm text-gray-500">{answeredCount} / {questions.length} answered</span>
+        </div>
+        {/* Progress bar */}
+        <div className="w-full h-1.5 bg-gray-200 rounded-full mb-3">
+          <div
+            className="h-1.5 bg-blue-500 rounded-full transition-all duration-300"
+            style={{ width: `${progress}%` }}
+          />
+        </div>
+        {/* Jump buttons */}
+        <div className="flex flex-wrap gap-2">
+          {questions.map((_, i) => {
+            const hasAnswer = answers[i].trim().length > 0;
+            const isCurrent = i === currentIdx;
+            const cellClass = isCurrent
+              ? 'bg-blue-600 text-white border-blue-600 ring-2 ring-blue-300'
+              : hasAnswer
+              ? 'bg-blue-100 text-blue-700 border-blue-300'
+              : 'bg-white text-gray-400 border-gray-200';
+            return (
+              <button
+                key={i}
+                onClick={() => goTo(i)}
+                className={`w-9 h-9 rounded-lg text-sm font-medium flex items-center justify-center transition-all hover:scale-110 border ${cellClass}`}
+                title={`Question ${i + 1}${hasAnswer ? ' (answered)' : ''}`}
+              >
+                {i + 1}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
-      {/* Bottom action bar */}
-      <div className="sticky bottom-0 bg-gray-50/95 backdrop-blur-sm pt-4 pb-2 mt-6">
+      {/* Question card */}
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden mt-2">
+        <div className="p-5 pb-3">
+          <div className="flex items-start gap-3">
+            <span className="shrink-0 w-7 h-7 rounded-lg text-xs font-bold flex items-center justify-center bg-blue-100 text-blue-600">
+              {currentIdx + 1}
+            </span>
+            <p className="text-base font-medium text-gray-800 pt-0.5 leading-relaxed">{q.text}</p>
+          </div>
+        </div>
+
+        <div className="px-5 pb-5">
+          <div className="relative">
+            <textarea
+              key={q.id}
+              ref={textareaRef}
+              value={answers[currentIdx]}
+              onChange={(e) => updateAnswer(currentIdx, e.target.value)}
+              placeholder="Type your answer… or hold Space to dictate"
+              rows={5}
+              disabled={loading}
+              className="w-full rounded-xl border border-gray-300 p-3 pr-12 text-sm text-gray-800 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none disabled:opacity-60"
+              onKeyDown={(e) => {
+                if (e.key === ' ' && recordingIdx !== currentIdx && transcribingIdx === null) {
+                  e.preventDefault();
+                  if (recordingIdx !== null) stopActiveRecording();
+                  startRecording(currentIdx);
+                }
+              }}
+              onKeyUp={(e) => {
+                if (e.key === ' ' && recordingIdx === currentIdx) {
+                  stopActiveRecording();
+                }
+              }}
+            />
+            <button
+              onClick={() => toggleRecording(currentIdx)}
+              disabled={loading || transcribingIdx === currentIdx}
+              title={recordingIdx === currentIdx ? 'Stop recording' : 'Dictate answer'}
+              className={`absolute right-2.5 top-2.5 w-8 h-8 rounded-full flex items-center justify-center transition-all ${
+                recordingIdx === currentIdx
+                  ? 'bg-red-500 text-white animate-pulse'
+                  : transcribingIdx === currentIdx
+                  ? 'bg-blue-100 text-blue-500 cursor-wait'
+                  : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+              }`}
+            >
+              {transcribingIdx === currentIdx ? (
+                <svg className="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                </svg>
+              ) : (
+                <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm4 10.93A7.001 7.001 0 0017 8a1 1 0 10-2 0A5 5 0 015 8a1 1 0 00-2 0 7.001 7.001 0 006 6.93V17H6a1 1 0 100 2h8a1 1 0 100-2h-3v-2.07z" />
+                </svg>
+              )}
+            </button>
+          </div>
+          {recordingIdx === currentIdx && (
+            <p className="mt-1 text-xs text-red-500 font-medium">Listening… click mic to stop</p>
+          )}
+          {transcribingIdx === currentIdx && (
+            <p className="mt-1 text-xs text-blue-500 font-medium">Transcribing…</p>
+          )}
+        </div>
+      </div>
+
+      {/* Navigation + submit */}
+      <div className="sticky bottom-0 bg-gray-50/95 backdrop-blur-sm pt-4 pb-2 mt-4">
         {speechError && (
           <p className="mb-3 text-sm text-amber-700 bg-amber-50 rounded-lg px-4 py-2">{speechError}</p>
         )}
@@ -312,32 +437,50 @@ export default function StudyView({ questions, sourceContext, sourceGrounded, on
           <p className="mb-3 text-sm text-red-600 bg-red-50 rounded-lg px-4 py-2">{error}</p>
         )}
 
-        {!grades ? (
+        <div className="flex items-center gap-3">
+          {/* Previous */}
           <button
-            onClick={submitAll}
-            disabled={answeredCount === 0 || loading}
-            className="w-full py-3 bg-blue-600 text-white font-semibold rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+            onClick={() => goTo(currentIdx - 1)}
+            disabled={currentIdx === 0}
+            className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl border border-gray-300 text-sm font-medium text-gray-600 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
           >
-            {loading ? (
-              <>
-                <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24" fill="none">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-                </svg>
-                Grading all answers...
-              </>
-            ) : (
-              `Submit All Answers (${answeredCount}/${questions.length})`
-            )}
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+            Back
           </button>
-        ) : (
-          <button
-            onClick={handleFinish}
-            className="w-full py-3 bg-gray-900 text-white font-semibold rounded-xl hover:bg-gray-700 transition-colors"
-          >
-            View Full Summary
-          </button>
-        )}
+
+          {/* Next or Submit */}
+          {isLast ? (
+            <button
+              onClick={submitAll}
+              disabled={answeredCount === 0 || loading}
+              className="flex-1 py-2.5 bg-blue-600 text-white font-semibold rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+            >
+              {loading ? (
+                <>
+                  <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                  </svg>
+                  Grading…
+                </>
+              ) : (
+                `Submit (${answeredCount}/${questions.length} answered)`
+              )}
+            </button>
+          ) : (
+            <button
+              onClick={() => goTo(currentIdx + 1)}
+              className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-blue-600 text-white font-semibold rounded-xl hover:bg-blue-700 transition-colors"
+            >
+              Next
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );

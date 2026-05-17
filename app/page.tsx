@@ -1,11 +1,14 @@
 'use client';
 
 import { useState, useCallback } from 'react';
+import dynamic from 'next/dynamic';
 import { AppView, ParsedQuestion, StudyResult, Difficulty } from '@/lib/types';
 import SetupView from '@/components/SetupView';
 import ReviewView from '@/components/ReviewView';
 import StudyView from '@/components/StudyView';
 import CompletedView from '@/components/CompletedView';
+
+const AuthButton = dynamic(() => import('@/components/AuthButton'), { ssr: false });
 
 export default function Home() {
   const [view, setView] = useState<AppView>('setup');
@@ -86,14 +89,17 @@ export default function Home() {
           </div>
           <span className="font-semibold text-gray-900">QuestionAIre</span>
         </div>
-        {view !== 'setup' && (
-          <button
-            onClick={handleReset}
-            className="text-sm text-gray-500 hover:text-gray-700 transition-colors"
-          >
-            New Deck
-          </button>
-        )}
+        <div className="flex items-center gap-4">
+          {view !== 'setup' && (
+            <button
+              onClick={handleReset}
+              className="text-sm text-gray-500 hover:text-gray-700 transition-colors"
+            >
+              New Deck
+            </button>
+          )}
+          <AuthButton />
+        </div>
       </header>
 
       <div className="max-w-5xl mx-auto px-4 py-8">
