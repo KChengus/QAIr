@@ -378,22 +378,10 @@ export default function StudyView({ questions, sourceContext, sourceGrounded, on
               ref={textareaRef}
               value={answers[currentIdx]}
               onChange={(e) => updateAnswer(currentIdx, e.target.value)}
-              placeholder="Type your answer… or hold Space to dictate"
+              placeholder="Type your answer..."
               rows={5}
               disabled={loading}
               className="w-full rounded-xl border border-gray-300 p-3 pr-12 text-sm text-gray-800 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none disabled:opacity-60"
-              onKeyDown={(e) => {
-                if (e.key === ' ' && recordingIdx !== currentIdx && transcribingIdx === null) {
-                  e.preventDefault();
-                  if (recordingIdx !== null) stopActiveRecording();
-                  startRecording(currentIdx);
-                }
-              }}
-              onKeyUp={(e) => {
-                if (e.key === ' ' && recordingIdx === currentIdx) {
-                  stopActiveRecording();
-                }
-              }}
             />
             <button
               onClick={() => toggleRecording(currentIdx)}

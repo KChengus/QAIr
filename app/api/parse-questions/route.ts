@@ -4,12 +4,13 @@ import { checkRateLimit, getRateLimitKey, AI_RATE_LIMIT } from '@/lib/rate-limit
 
 const client = new Anthropic();
 
-type Difficulty = 'easy' | 'medium' | 'hard';
+type Difficulty = 'easy' | 'medium' | 'hard' | 'mixed';
 
 const DIFFICULTY_INSTRUCTIONS: Record<Difficulty, string> = {
   easy: 'Generate simple recall and definition questions. Focus on basic facts, key terms, and straightforward concepts that test surface-level understanding.',
   medium: 'Generate questions that require understanding and application. Include "explain why", "compare and contrast", and "how does X relate to Y" style questions.',
   hard: 'Generate challenging questions that require deep analysis, synthesis, and critical thinking. Include multi-step reasoning, edge cases, "what would happen if", and questions that connect multiple concepts.',
+  mixed: 'Generate a balanced mix spanning ALL THREE difficulty levels, spread as evenly as possible across the set: (1) EASY — simple recall and definitions of basic facts and key terms; (2) MEDIUM — understanding and application, "explain why" and "compare and contrast"; (3) HARD — deep analysis, synthesis, multi-step reasoning, and "what would happen if" questions that connect multiple concepts. Order the questions from easiest to hardest.',
 };
 
 export async function POST(request: NextRequest) {
@@ -30,7 +31,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'No text provided' }, { status: 400 });
   }
 
-  const validDifficulties: Difficulty[] = ['easy', 'medium', 'hard'];
+  const validDifficulties: Difficulty[] = ['easy', 'medium', 'hard', 'mixed'];
   const diff: Difficulty = validDifficulties.includes(difficulty) ? difficulty : 'medium';
 
   const prevBlock =

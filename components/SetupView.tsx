@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useCallback } from 'react';
+import Image from 'next/image';
 import { ParsedQuestion, Difficulty } from '@/lib/types';
 
 interface Props {
@@ -30,6 +31,12 @@ const DIFFICULTY_CONFIG: Record<Difficulty, { label: string; color: string; acti
     color: 'border-red-200 text-red-700 hover:bg-red-50',
     activeColor: 'border-red-500 bg-red-50 text-red-700 ring-2 ring-red-200',
     desc: 'Analysis & critical thinking',
+  },
+  mixed: {
+    label: 'Mixed',
+    color: 'border-indigo-200 text-indigo-700 hover:bg-indigo-50',
+    activeColor: 'border-indigo-500 bg-indigo-50 text-indigo-700 ring-2 ring-indigo-200',
+    desc: 'A blend of all three',
   },
 };
 
@@ -184,19 +191,60 @@ export default function SetupView({ onParsed }: Props) {
   };
 
   return (
-    <div className="max-w-3xl mx-auto">
-      <div className="text-center mb-10">
-        <h1 className="text-3xl font-bold text-gray-900 mb-3">
-          QuestionAIre 
+    <div className="max-w-5xl mx-auto">
+      {/* Hero — two column on lg, stacked on mobile */}
+      <div className="flex flex-col lg:flex-row items-center gap-10 mb-12">
+        {/* Left: text */}
+        <div className="flex-1 min-w-0">
+          <span className="inline-block bg-blue-100 text-blue-700 text-xs font-semibold px-3 py-1 rounded-full mb-4 tracking-wide uppercase">
+            Active Learning · Not Passive Reading
+          </span>
+          <h1 className="text-4xl lg:text-5xl font-extrabold text-gray-900 leading-tight mb-5">
+            Don&apos;t let AI<br />make you{' '}
+            <span className="text-blue-600">braindead</span>.
+          </h1>
+          <blockquote className="pl-5 border-l-4 border-blue-500 mb-5">
+            <p className="text-lg text-gray-700 italic leading-relaxed">
+              &ldquo;You can outsource your thinking, but you can&apos;t outsource your understanding.&rdquo;
+            </p>
+            <footer className="mt-2 text-sm font-semibold text-gray-500">
+              — Andrej Karpathy, AI researcher &amp; former Tesla AI Director
+            </footer>
+          </blockquote>
+          <p className="text-gray-500 text-base leading-relaxed">
 
-        </h1>
-        <p className="text-gray-500 text-base">
-          Have you truly understood the context of your material? <br/>
-          Challenge yourself by explaining your thoughts and ideas, either out loud or in writing. <br/> 
-          This kind of active learning forces you to slow down, question what you know, and make your understanding more precise. <br/>
-          Empower your prefrontal cortex to achieve greatness 🧠 <br/>
+
+          <b>Have you truly understood the context of your material? </b><br/>
+          QuestionAIre forces you to actually understand what you study, not just read it.
+          Paste your notes or upload a PDF, get sharp AI-generated questions, answer them
+          in your own words, and receive detailed feedback on your thinking. 🧠
+
+         {/* Challenge yourself by explaining your thoughts and ideas, either out loud or in writing. 
+          This kind of active learning forces you to slow down, question what you know, and make your understanding more precise.
+          Empower your prefrontal cortex to achieve greatness.
           In doing so, you deepen comprehension and build stronger, more lasting understanding.
-        </p>
+ */}
+          </p>
+        </div>
+
+        {/* Right: both images stacked */}
+        <div className="lg:w-80 shrink-0 flex flex-col items-center gap-4">
+          <Image
+            src="/images/clanker_danger.png"
+            alt="Call me a clanker one more time"
+            width={240}
+            height={135}
+            className="w-full rounded-2xl shadow-xl"
+            priority
+          />
+          <Image
+            src="/images/clanker_crab.png"
+            alt="Robot Mr. Krabs"
+            width={200}
+            height={260}
+            className="w-36 drop-shadow-lg"
+          />
+        </div>
       </div>
 
       <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
@@ -328,7 +376,7 @@ export default function SetupView({ onParsed }: Props) {
           <label className="block text-sm font-medium text-gray-700 mb-2">
             Question Difficulty
           </label>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {(Object.entries(DIFFICULTY_CONFIG) as [Difficulty, typeof DIFFICULTY_CONFIG[Difficulty]][]).map(
               ([key, config]) => (
                 <button
@@ -427,13 +475,13 @@ export default function SetupView({ onParsed }: Props) {
         </div>
       </div>
 
-      <div className="mt-8 grid grid-cols-3 gap-4 text-center">
+      <div className="mt-8 grid grid-cols-1 sm:grid-cols-3 gap-4">
         {[
-          { icon: '🧠', title: 'AI Grading', desc: 'Nuanced feedback on conceptual understanding' },
-          { icon: '🎤', title: 'Voice Input', desc: 'Answer hands-free with your microphone' },
-          { icon: '📚', title: 'Source-Grounded', desc: 'AI cites your notes to prevent hallucinations' },
+          { icon: '🧠', title: 'AI Grading', desc: 'Nuanced feedback on conceptual understanding — not just right/wrong' },
+          { icon: '🎤', title: 'Voice Input', desc: 'Speak your answers hands-free with your mic' },
+          { icon: '📚', title: 'Source-Grounded', desc: 'Questions come from your own notes, not the void' },
         ].map((f) => (
-          <div key={f.title} className="bg-white rounded-xl p-4 border border-gray-200">
+          <div key={f.title} className="bg-white rounded-xl p-4 border border-gray-200 shadow-sm">
             <div className="text-2xl mb-2">{f.icon}</div>
             <div className="font-semibold text-gray-800 text-sm">{f.title}</div>
             <div className="text-gray-500 text-xs mt-1">{f.desc}</div>

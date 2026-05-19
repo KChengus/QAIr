@@ -1,4 +1,15 @@
 import { redirect } from 'next/navigation';
+
+// AUTH DISABLED FOR NOW — the protected dashboard is inert and bounces to the
+// app root. To restore, delete the redirect stub and uncomment the original.
+
+export default function DashboardPage() {
+  redirect('/');
+}
+
+/* ─── Original protected dashboard (re-enable when auth is restored) ───────────
+
+import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import SignOutButton from '@/components/SignOutButton';
@@ -55,7 +66,7 @@ export default async function DashboardPage() {
           </div>
           <h2 className="text-lg font-semibold text-gray-900 mb-2">No saved decks yet</h2>
           <p className="text-sm text-gray-500 mb-6 max-w-sm">
-            Complete a study session and save your deck — it&apos;ll appear here so you can pick up right where you left off.
+            Complete a study session and save your deck — it'll appear here so you can pick up right where you left off.
           </p>
           <Link
             href="/"
@@ -69,3 +80,5 @@ export default async function DashboardPage() {
     </div>
   );
 }
+
+──────────────────────────────────────────────────────────────────────────── */

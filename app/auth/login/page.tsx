@@ -1,9 +1,15 @@
-'use client';
+import { redirect } from 'next/navigation';
 
-import dynamic from 'next/dynamic';
+// AUTH DISABLED FOR NOW — this page is inert and bounces to the app root.
+// To restore, delete the redirect and uncomment the original below.
 
-const LoginForm = dynamic(() => import('./LoginForm'), { ssr: false });
+// 'use client';
+// import dynamic from 'next/dynamic';
+// const LoginForm = dynamic(() => import('./LoginForm'), { ssr: false });
+// export default function LoginPage() {
+//   return <LoginForm />;
+// }
 
 export default function LoginPage() {
-  return <LoginForm />;
+  redirect('/');
 }

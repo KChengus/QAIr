@@ -1,14 +1,15 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import dynamic from 'next/dynamic';
+// Auth disabled for now — re-enable to restore the header sign-in button
+// import dynamic from 'next/dynamic';
 import { AppView, ParsedQuestion, StudyResult, Difficulty } from '@/lib/types';
 import SetupView from '@/components/SetupView';
 import ReviewView from '@/components/ReviewView';
 import StudyView from '@/components/StudyView';
 import CompletedView from '@/components/CompletedView';
 
-const AuthButton = dynamic(() => import('@/components/AuthButton'), { ssr: false });
+// const AuthButton = dynamic(() => import('@/components/AuthButton'), { ssr: false });
 
 export default function Home() {
   const [view, setView] = useState<AppView>('setup');
@@ -98,7 +99,8 @@ export default function Home() {
               New Deck
             </button>
           )}
-          <AuthButton />
+          {/* Auth disabled for now — re-enable to restore the header sign-in button */}
+          {/* <AuthButton /> */}
         </div>
       </header>
 
@@ -107,7 +109,6 @@ export default function Home() {
         {view === 'review' && (
           <ReviewView
             questions={questions}
-            sourceContext={sourceContext}
             onStart={handleStartStudy}
             onBack={() => setView('setup')}
           />
